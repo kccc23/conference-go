@@ -1,6 +1,7 @@
 from django.http import JsonResponse
-
+from django.core.exceptions import ObjectDoesNotExist
 from .models import Presentation
+from common.json import ModelEncoder
 
 
 def api_list_presentations(request, conference_id):
@@ -36,7 +37,28 @@ def api_list_presentations(request, conference_id):
     return JsonResponse({"presentations": presentations})
 
 
+class PresentationDetailEncoder(ModelEncoder):
+    model = Presentation
+    properties = [
+        "presenter_name",
+        "company_name",
+        "presenter_email",
+        "title",
+        "synopsis",
+        "created",
+    ]
+
+
 def api_show_presentation(request, id):
+    try:
+        presentation = Presentation.objects.get(id=id)
+        return JsonResponse(
+            presentation,
+            PresentationDetailEncoder,
+            safe=False,
+        )
+    except ObjectDoesNotExist:
+        return JsonResponse("There is no presentation.", safe=False)
     """
     Returns the details for the Presentation model specified
     by the id parameter.
@@ -61,4 +83,20 @@ def api_show_presentation(request, id):
         }
     }
     """
-    return JsonResponse({})
+    # try:
+    #     p = Presentation.objects.get(id=id)
+    #     return JsonResponse({
+    #         "presenter_name": p.presenter_name,
+    #         "company_name": p.company_name,
+    #         "presenter_email": p.presenter_email,
+    #         "title": p.title,
+    #         "synopsis": p.synopsis,
+    #         "created": p.created,
+    #         "status": p.status.name,
+    #         "conference": {
+    #             "name": p.conference.name,
+    #             "href": p.conference.get_api_url(),
+    #         }
+    #     })
+    # except ObjectDoesNotExist:
+    #     return JsonResponse("There is no presentation.", safe=False)

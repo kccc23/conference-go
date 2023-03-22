@@ -1,9 +1,19 @@
 from django.http import JsonResponse
-
+from common.json import ModelEncoder
 from .models import Conference, Location
 
 
+class ConferenceListEncoder(ModelEncoder):
+    model = Conference
+    properties = ["name"]
+
+
 def api_list_conferences(request):
+    conferences = Conference.objects.all()
+    return JsonResponse(
+        {"conferences": conferences},
+        ConferenceListEncoder,
+    )
     """
     Lists the conference names and the link to the conference.
 
@@ -22,19 +32,45 @@ def api_list_conferences(request):
         ]
     }
     """
-    response = []
-    conferences = Conference.objects.all()
-    for conference in conferences:
-        response.append(
-            {
-                "name": conference.name,
-                "href": conference.get_api_url(),
-            }
-        )
-    return JsonResponse({"conferences": response})
+    # response = []
+    # conferences = Conference.objects.all()
+    # for conference in conferences:
+    #     response.append(
+    #         {
+    #             "name": conference.name,
+    #             "href": conference.get_api_url(),
+    #         }
+    #     )
+    # return JsonResponse({"conferences": response})
+
+
+class LocationListEncoder(ModelEncoder):
+    model = Location
+    properties = ["name"]
+
+
+class ConferenceDetailEncoder(ModelEncoder):
+    model = Conference
+    properties = [
+        "name",
+        "description",
+        "max_presentations",
+        "max_attendees",
+        "starts",
+        "ends",
+        "created",
+        "updated",
+        "location",
+    ]
+    encoders = {
+        "location": LocationListEncoder(),
+    }
 
 
 def api_show_conference(request, id):
+    conference = Conference.objects.get(id=id)
+    return JsonResponse(conference, ConferenceDetailEncoder, safe=False)
+
     """
     Returns the details for the Conference model specified
     by the id parameter.
@@ -59,23 +95,23 @@ def api_show_conference(request, id):
         }
     }
     """
-    conference = Conference.objects.get(id=id)
-    return JsonResponse(
-        {
-            "name": conference.name,
-            "starts": conference.starts,
-            "ends": conference.ends,
-            "description": conference.description,
-            "created": conference.created,
-            "updated": conference.updated,
-            "max_presentations": conference.max_presentations,
-            "max_attendees": conference.max_attendees,
-            "location": {
-                "name": conference.location.name,
-                "href": conference.location.get_api_url(),
-            },
-        }
-    )
+    # conference = Conference.objects.get(id=id)
+    # return JsonResponse(
+    #     {
+    #         "name": conference.name,
+    #         "starts": conference.starts,
+    #         "ends": conference.ends,
+    #         "description": conference.description,
+    #         "created": conference.created,
+    #         "updated": conference.updated,
+    #         "max_presentations": conference.max_presentations,
+    #         "max_attendees": conference.max_attendees,
+    #         "location": {
+    #             "name": conference.location.name,
+    #             "href": conference.location.get_api_url(),
+    #         },
+    #     }
+    # )
 
 
 def api_list_locations(request):
@@ -97,7 +133,14 @@ def api_list_locations(request):
         ]
     }
     """
-    return JsonResponse({})
+    locations = [
+        {
+            "name": l.name,
+            "href": l.get_api_url(),
+        }
+        for l in Location.objects.all()
+    ]
+    return JsonResponse({"locations": locations})
 
 
 def api_show_location(request, id):
@@ -117,4 +160,12 @@ def api_show_location(request, id):
         "state": the two-letter abbreviation for the state,
     }
     """
-    return JsonResponse({})
+    l = Location.objects.get(id=id)
+    return JsonResponse({
+        "name": l.name,
+        "city": l.city,
+        "room_count": l.room_count,
+        "created": l.created,
+        "updated": l.updated,
+        "state": l.state.abbreviation,
+    })
