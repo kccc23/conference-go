@@ -1,4 +1,4 @@
-from django.core.serializers.json import DjangoJSONEncoder
+# from django.core.serializers.json import DjangoJSONEncoder
 from json import JSONEncoder
 from datetime import datetime
 from django.db.models import QuerySet
@@ -31,11 +31,15 @@ class ModelEncoder(DateEncoder, QuerySetEncoder, JSONEncoder):
                 if property in self.encoders:
                     encoder = self.encoders[property]
                     value = encoder.default(value)
-                    print(encoder)
-                    print(value)
+                    # print(encoder)
+                    # print(value)
                 d[property] = value
+            d.update(self.get_extra_data(o))
             return d
         return super().default(o)
+
+    def get_extra_data(self, o):
+        return {}
 
 # class ModelEncoder(DjangoJSONEncoder):
 #     def default(self, o):
