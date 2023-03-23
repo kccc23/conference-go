@@ -2,6 +2,7 @@ from django.http import JsonResponse
 from common.json import ModelEncoder
 from .models import Conference, Location, State
 from django.views.decorators.http import require_http_methods
+from .acls import get_photo, get_weather_data
 import json
 
 
@@ -91,7 +92,14 @@ class ConferenceDetailEncoder(ModelEncoder):
 def api_show_conference(request, id):
     if request.method == "GET":
         conference = Conference.objects.get(id=id)
-        return JsonResponse(conference, ConferenceDetailEncoder, safe=False)
+        weather = get_weather_data(
+            conference.location.city, conference.location.state.abbreviation
+        )
+        return JsonResponse(
+            {"conference": conference, "weather": weather},
+            encoder=ConferenceDetailEncoder,
+            safe=False
+        )
     elif request.method == "DELETE":
         count, breakdown = Conference.objects.filter(id=id).delete()
         return JsonResponse({"deleted": count > 0})
@@ -174,6 +182,8 @@ def api_list_locations(request):
                 {"message": "Invalid state abbreviation"},
                 status=400,
             )
+        photo = get_photo(content["city"], content["state"].abbreviation)
+        content.update(photo)
         location = Location.objects.create(**content)
         return JsonResponse(
             location,
@@ -216,6 +226,7 @@ class LocationDetailEncoder(ModelEncoder):
         "room_count",
         "created",
         "updated",
+        "picture_url",
     ]
 
     def get_extra_data(self, o):
@@ -226,6 +237,8 @@ class LocationDetailEncoder(ModelEncoder):
 def api_show_location(request, id):
     if request.method == "GET":
         location = Location.objects.get(id=id)
+        photo = get_photo(location.city, location.state.abbreviation)
+        location.picture_url = photo["picture_url"]
         return JsonResponse(
             location,
             encoder=LocationDetailEncoder,
@@ -245,6 +258,7 @@ def api_show_location(request, id):
                 {"message": "Invalid state abbreviation"},
                 status=400,
             )
+        location = Location.objects.create(**content)
         Location.objects.filter(id=id).update(**content)
         location = Location.objects.get(id=id)
         return JsonResponse(
