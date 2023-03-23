@@ -1,10 +1,45 @@
 from django.http import JsonResponse
 from django.core.exceptions import ObjectDoesNotExist
-from .models import Presentation
+from .models import Presentation, Status
 from common.json import ModelEncoder
+from django.views.decorators.http import require_http_methods
+from events.models import Conference
+from events.api_views import ConferenceListEncoder
+import json
 
 
+class PresentationListEncoder(ModelEncoder):
+    model = Presentation
+    properties = ["title"]
+
+    def get_extra_data(self, o):
+        return {"status": o.status.name}
+
+
+@require_http_methods(["GET", "POST"])
 def api_list_presentations(request, conference_id):
+    if request.method == "GET":
+        presentations = Presentation.objects.filter(conference=conference_id)
+        return JsonResponse(
+            {"presentations": presentations},
+            encoder=PresentationListEncoder,
+        )
+    elif request.method == "POST":
+        content = json.loads(request.body)
+        try:
+            conference = Conference.objects.get(id=conference_id)
+            content["conference"] = conference
+        except Conference.DoesNotExist:
+            return JsonResponse(
+                {"message": "Invalid conference id"},
+                status=400,
+            )
+        presentation = Presentation.create(**content)
+        return JsonResponse(
+            presentation,
+            encoder=PresentationDetailEncoder,
+            safe=False,
+        )
     """
     Lists the presentation titles and the link to the
     presentation for the specified conference id.
@@ -26,15 +61,15 @@ def api_list_presentations(request, conference_id):
         ]
     }
     """
-    presentations = [
-        {
-            "title": p.title,
-            "status": p.status.name,
-            "href": p.get_api_url(),
-        }
-        for p in Presentation.objects.filter(conference=conference_id)
-    ]
-    return JsonResponse({"presentations": presentations})
+    # presentations = [
+    #     {
+    #         "title": p.title,
+    #         "status": p.status.name,
+    #         "href": p.get_api_url(),
+    #     }
+    #     for p in Presentation.objects.filter(conference=conference_id)
+    # ]
+    # return JsonResponse({"presentations": presentations})
 
 
 class PresentationDetailEncoder(ModelEncoder):
@@ -46,19 +81,60 @@ class PresentationDetailEncoder(ModelEncoder):
         "title",
         "synopsis",
         "created",
+        "conference"
     ]
 
+    encoders = {
+        "conference": ConferenceListEncoder(),
+    }
 
+    def get_extra_data(self, o):
+        return {"status": o.status.name}
+
+
+@require_http_methods(["GET", "PUT", "DELETE"])
 def api_show_presentation(request, id):
-    try:
+    if request.method == "GET":
+        try:
+            presentation = Presentation.objects.get(id=id)
+            return JsonResponse(
+                presentation,
+                PresentationDetailEncoder,
+                safe=False,
+            )
+        except ObjectDoesNotExist:
+            return JsonResponse({"message": "There is no presentation"})
+    elif request.method == "DELETE":
+        count, breakdown = Presentation.objects.filter(id=id).delete()
+        return JsonResponse({"deleted": count > 0})
+    elif request.method == "PUT":
+        content = json.loads(request.body)
+        try:
+            if "conference" in content:
+                conference = Conference.objects.get(id=content["conference"])
+                content["conference"] = conference
+        except Conference.DoesNotExist:
+            return JsonResponse(
+                {"message": "Invalid conference id"},
+                status=400,
+            )
+        try:
+            if "status" in content:
+                status = Status.objects.get(name=content["status"])
+                content["status"] = status
+        except Status.DoesNotExist:
+            return JsonResponse(
+                {"message": "Invalid status"},
+                status=400,
+            )
+        Presentation.objects.filter(id=id).update(**content)
         presentation = Presentation.objects.get(id=id)
         return JsonResponse(
             presentation,
-            PresentationDetailEncoder,
+            encoder=PresentationDetailEncoder,
             safe=False,
         )
-    except ObjectDoesNotExist:
-        return JsonResponse("There is no presentation.", safe=False)
+
     """
     Returns the details for the Presentation model specified
     by the id parameter.
