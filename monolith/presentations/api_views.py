@@ -6,6 +6,7 @@ from django.views.decorators.http import require_http_methods
 from events.models import Conference
 from events.api_views import ConferenceListEncoder
 import json
+import pika
 
 
 class PresentationListEncoder(ModelEncoder):
@@ -176,3 +177,50 @@ def api_show_presentation(request, id):
     #     })
     # except ObjectDoesNotExist:
     #     return JsonResponse("There is no presentation.", safe=False)
+
+
+def send_to_queue(queue_name, message):
+    parameters = pika.ConnectionParameters(host="rabbitmq")
+    connection = pika.BlockingConnection(parameters)
+    channel = connection.channel()
+    channel.queue_declare(queue=queue_name)
+    channel.basic_publish(
+        exchange="",
+        routing_key=queue_name,
+        body=json.dumps(message),
+    )
+    connection.close()
+
+
+@require_http_methods(["PUT"])
+def api_approve_presentation(request, pk):
+    presentation = Presentation.objects.get(id=pk)
+    presentation.approve()
+    message = {
+        "presenter_name": presentation.presenter_name,
+        "presenter_email": presentation.presenter_email,
+        "title": presentation.title,
+    }
+    send_to_queue("presentation_approvals", message)
+    return JsonResponse(
+        presentation,
+        encoder=PresentationDetailEncoder,
+        safe=False,
+    )
+
+
+@require_http_methods(["PUT"])
+def api_reject_presentation(request, pk):
+    presentation = Presentation.objects.get(id=pk)
+    presentation.reject()
+    message = {
+        "presenter_name": presentation.presenter_name,
+        "presenter_email": presentation.presenter_email,
+        "title": presentation.title,
+    }
+    send_to_queue("presentation_rejections", message)
+    return JsonResponse(
+        presentation,
+        encoder=PresentationDetailEncoder,
+        safe=False,
+    )
