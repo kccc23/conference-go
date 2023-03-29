@@ -3,7 +3,9 @@ import pika
 import django
 import os
 import sys
+import time
 from django.core.mail import send_mail
+from pika.exceptions import AMQPConnectionError
 
 
 sys.path.append("")
@@ -39,21 +41,51 @@ def process_rejection(ch, method, properties, body):
     )
 
 
-def on_open(connection):
-    connection.channel(on_open_callback=on_channel_open)
+while True:
+    try:
+        parameters = pika.ConnectionParameters(host='rabbitmq')
+        connection = pika.BlockingConnection(parameters)
+        channel = connection.channel()
+        channel.queue_declare(queue='presentation_approvals')
+        channel.basic_consume(
+            queue='presentation_approvals',
+            on_message_callback=process_approval,
+            auto_ack=True,
+        )
+        # channel.start_consuming()
+
+        # parameters = pika.ConnectionParameters(host='rabbitmq')
+        # connection = pika.BlockingConnection(parameters)
+        # channel = connection.channel()
+        channel.queue_declare(queue='presentation_rejections')
+        channel.basic_consume(
+            queue='presentation_rejections',
+            on_message_callback=process_rejection,
+            auto_ack=True,
+        )
+
+        channel.start_consuming()
+
+    except AMQPConnectionError:
+        print("Could not connect to RabbitMQ")
+        time.sleep(2.0)
+
+# def on_open(connection):
+#     connection.channel(on_open_callback=on_channel_open)
 
 
-def on_channel_open(channel):
-    channel.basic_consume(queue='presentation_approvals', on_message_callback=process_approval, auto_ack=True)
-    channel.basic_consume(queue='presentation_rejections', on_message_callback=process_rejection, auto_ack=True)
+# def on_channel_open(channel):
+#     channel.basic_consume(queue='presentation_approvals',
+#                           on_message_callback=process_approval, auto_ack=True)
+#     channel.basic_consume(queue='presentation_rejections',
+#                           on_message_callback=process_rejection, auto_ack=True)
 
 
-parameters = pika.ConnectionParameters(host='rabbitmq')
-connection = pika.SelectConnection(parameters=parameters,
-                                    on_open_callback=on_open)
+# parameters = pika.ConnectionParameters(host='rabbitmq')
+# connection = pika.SelectConnection(parameters=parameters,
+#                                     on_open_callback=on_open)
 
-
-try:
-    connection.ioloop.start()
-except KeyboardInterrupt:
-    connection.close()
+# try:
+#     connection.ioloop.start()
+# except KeyboardInterrupt:
+#     connection.close()
